@@ -1701,7 +1701,7 @@ body {
                     <div class="diagnosis-summary-box">
                         <div class="diag-bullet">
                             <span class="bullet red"></span>
-                            <p><strong>진단 해석:</strong> 해당 캠핑장은 현재 <strong>기존 단골 중심(90%)</strong>으로만 운영되고 있어, 장기적인 매출 성장을 위한 신규 유입 동력이 매우 부족한 상태입니다.</p>
+                            <p><strong>진단 해석:</strong> 해당 캠핑장은 현재 <strong>기존 단골 중심(<span id="loyal-ratio-display">90</span>%)</strong>으로만 운영되고 있어, 장기적인 매출 성장을 위한 신규 유입 동력이 매우 부족한 상태입니다.</p>
                         </div>
                         <div class="diag-bullet">
                             <span class="bullet amber"></span>
@@ -1830,6 +1830,8 @@ body {
                         <h3>솔루션 조건 설정</h3>
                     </div>
 
+
+
                     <!-- 할인율 설정 -->
                     <div class="form-group">
                         <label for="discount-slider" class="form-label">
@@ -1956,20 +1958,20 @@ body {
                                 <text x="135" y="25" class="chart-annotation" fill="var(--chart-divider-text)">솔루션 적용 시점</text>
 
                                 <!-- 적용 이전 선 (10% 유지) -->
-                                <path d="M 50 135 L 130 135" stroke="var(--color-warning)" stroke-width="3" fill="none" stroke-linecap="round" />
-                                <circle cx="50" cy="135" r="4" fill="var(--color-warning)" />
-                                <circle cx="130" cy="135" r="4" fill="var(--color-warning)" />
+                                <path id="baseline-path" d="M 50 135 L 130 135" stroke="var(--color-warning)" stroke-width="3" fill="none" stroke-linecap="round" />
+                                <circle id="baseline-pt1" cx="50" cy="135" r="4" fill="var(--color-warning)" />
+                                <circle id="baseline-pt2" cx="130" cy="135" r="4" fill="var(--color-warning)" />
 
                                 <!-- 적용 이후 전망 곡선 (슬라이더 값에 따라 변경됨) -->
                                 <path id="forecast-path" d="M 130 135 C 180 135, 210 75, 290 75 S 340 75, 370 75" stroke="var(--color-success)" stroke-width="3" fill="none" />
-                                <circle cx="130" cy="135" r="4" fill="var(--color-success)" />
+                                <circle id="pt-start" cx="130" cy="135" r="4" fill="var(--color-success)" />
                                 <circle id="pt-1wk" cx="210" cy="98" r="4" fill="var(--color-success)" />
                                 <circle id="pt-2wk" cx="290" cy="75" r="4" fill="var(--color-success)" />
                                 <circle id="pt-1mo" cx="370" cy="75" r="4" fill="var(--color-success)" />
 
                                 <!-- 그래프 위의 수치 라벨 -->
-                                <text x="50" y="125" class="chart-val" fill="var(--color-warning)">10%</text>
-                                <text x="115" y="125" class="chart-val" fill="var(--color-warning)">10%</text>
+                                <text id="lbl-base1" x="50" y="125" class="chart-val" fill="var(--color-warning)">10%</text>
+                                <text id="lbl-base2" x="115" y="125" class="chart-val" fill="var(--color-warning)">10%</text>
                                 <text id="lbl-1wk" x="210" y="88" class="chart-val" fill="var(--color-success)">28%</text>
                                 <text id="lbl-2wk" x="290" y="65" class="chart-val" fill="var(--color-success)">35%</text>
                                 <text id="lbl-1mo" x="370" y="65" class="chart-val" fill="var(--color-success)">35%</text>
@@ -2095,6 +2097,31 @@ document.addEventListener('DOMContentLoaded', () => {
     let isDarkTheme = false;
     let isCampaignActive = false;
 
+    // URL 쿼리 파라미터에서 baseline(또는 new_ratio) 가져오기
+    let baseline = 10; // 디폴트 값
+    const urlParams = new URLSearchParams(window.location.search);
+    const paramVal = urlParams.get('baseline') || urlParams.get('new_ratio') || urlParams.get('ratio');
+    if (paramVal) {
+        const parsed = parseInt(paramVal);
+        if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+            baseline = parsed;
+        }
+    }
+
+    // 도넛 차트 및 진단 해석 텍스트 초기화 반영
+    const segmentMyCamp = document.querySelector('.segment-my-camp');
+    if (segmentMyCamp) {
+        segmentMyCamp.setAttribute('stroke-dasharray', `${baseline} ${100 - baseline}`);
+    }
+    const myCampPercentDisplay = document.querySelector('.donut-label.warning-text .percent');
+    if (myCampPercentDisplay) {
+        myCampPercentDisplay.textContent = `${baseline}%`;
+    }
+    const loyalRatioDisplay = document.getElementById('loyal-ratio-display');
+    if (loyalRatioDisplay) {
+        loyalRatioDisplay.textContent = 100 - baseline;
+    }
+
     // 1. 다크/라이트 테마 토글
     if (themeToggleBtn) {
         themeToggleBtn.addEventListener('click', () => {
@@ -2182,7 +2209,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 expectedRevenue = 800000;
         }
 
-        const baseline = 10; // 현재 10%
         const target = baseline + conversionIncrease; // 예상 신규율
 
         const wk1 = Math.round(baseline + conversionIncrease * 0.53);
@@ -2198,9 +2224,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const y1 = getPercentY(wk1);
         const y2 = getPercentY(wk2);
         const y3 = getPercentY(mo1);
+        const baselineY = getPercentY(baseline);
+
+        // 적용 이전 플랫 라인 업데이트
+        const baselinePath = document.getElementById('baseline-path');
+        if (baselinePath) baselinePath.setAttribute('d', `M 50 ${baselineY.toFixed(1)} L 130 ${baselineY.toFixed(1)}`);
+
+        // 적용 이전 플랫 라인 포인트 업데이트
+        const baselinePt1 = document.getElementById('baseline-pt1');
+        if (baselinePt1) baselinePt1.setAttribute('cy', baselineY.toFixed(1));
+
+        const baselinePt2 = document.getElementById('baseline-pt2');
+        if (baselinePt2) baselinePt2.setAttribute('cy', baselineY.toFixed(1));
+
+        const ptStart = document.getElementById('pt-start');
+        if (ptStart) ptStart.setAttribute('cy', baselineY.toFixed(1));
+
+        // 적용 이전 플랫 라인 텍스트 라벨 업데이트
+        const lblBase1 = document.getElementById('lbl-base1');
+        if (lblBase1) {
+            lblBase1.setAttribute('y', (baselineY - 10).toFixed(1));
+            lblBase1.textContent = `${baseline}%`;
+        }
+
+        const lblBase2 = document.getElementById('lbl-base2');
+        if (lblBase2) {
+            lblBase2.setAttribute('y', (baselineY - 10).toFixed(1));
+            lblBase2.textContent = `${baseline}%`;
+        }
 
         // SVG 베지에 곡선 경로 작성
-        const pathD = `M 130 135 C 160 135, 180 ${y1.toFixed(1)}, 210 ${y1.toFixed(1)} S 260 ${y2.toFixed(1)}, 290 ${y2.toFixed(1)} S 340 ${y3.toFixed(1)}, 370 ${y3.toFixed(1)}`;
+        const pathD = `M 130 ${baselineY.toFixed(1)} C 160 ${baselineY.toFixed(1)}, 180 ${y1.toFixed(1)}, 210 ${y1.toFixed(1)} S 260 ${y2.toFixed(1)}, 290 ${y2.toFixed(1)} S 340 ${y3.toFixed(1)}, 370 ${y3.toFixed(1)}`;
         if (forecastPath) forecastPath.setAttribute('d', pathD);
 
         // SVG 포인트 좌표 이동
@@ -2240,6 +2294,8 @@ document.addEventListener('DOMContentLoaded', () => {
             updateSimulation(val);
         });
     }
+
+
 
     // 7. 캠페인 솔루션 활성화 / 적용
     if (activateCampaignBtn) {
