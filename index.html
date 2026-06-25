@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -1993,42 +1992,8 @@ body {
                                         <th>전월 대비 증감</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>2026-06 (당월)</td>
-                                        <td>1,250건</td>
-                                        <td>450건</td>
-                                        <td class="font-bold">36.0%</td>
-                                        <td><span class="text-green">▲ 4.2%</span></td>
-                                    </tr>
-                                    <tr>
-                                        <td>2026-05</td>
-                                        <td>1,180건</td>
-                                        <td>375건</td>
-                                        <td class="font-bold">31.8%</td>
-                                        <td><span class="text-green">▲ 3.1%</span></td>
-                                    </tr>
-                                    <tr>
-                                        <td>2026-04</td>
-                                        <td>1,020건</td>
-                                        <td>293건</td>
-                                        <td class="font-bold">28.7%</td>
-                                        <td><span class="text-green">▲ 4.7%</span></td>
-                                    </tr>
-                                    <tr>
-                                        <td>2026-03</td>
-                                        <td>950건</td>
-                                        <td>228건</td>
-                                        <td class="font-bold">24.0%</td>
-                                        <td><span class="text-green">▲ 1.8%</span></td>
-                                    </tr>
-                                    <tr>
-                                        <td>2026-02</td>
-                                        <td>890건</td>
-                                        <td>197건</td>
-                                        <td class="font-bold">22.2%</td>
-                                        <td><span class="text-muted">-</span></td>
-                                    </tr>
+                                <tbody id="log-table-body">
+                                    <!-- 자바스크립트로 동적 렌더링 -->
                                 </tbody>
                             </table>
                         </div>
@@ -2098,15 +2063,44 @@ document.addEventListener('DOMContentLoaded', () => {
     let isCampaignActive = false;
     let maxScale = 50;
 
-    // URL 쿼리 파라미터에서 baseline(또는 new_ratio) 가져오기
-    let baseline = 10; // 디폴트 값
+    // 단위 접미사(만, 건, 원 등) 제거 및 단위 변환 기능 포함 파싱 헬퍼 함수
+    function parseValue(valStr) {
+        if (!valStr) return null;
+        let isMan = valStr.includes('만');
+        let num = parseInt(valStr.replace(/[^0-9]/g, ''));
+        if (isNaN(num)) return null;
+        if (isMan) num *= 10000;
+        return num;
+    }
+
+    // URL 쿼리 파라미터에서 baseline(또는 new_ratio) 및 신규 매출/전체 건수 가져오기
+    let baseline = 10; // 디폴트 비율 (%)
+    let new_user_revenue = 800000; // 디폴트 신규 유저 월 예약 매출액 (원)
+    let total_bookings = 1250; // 디폴트 월 전체 예약 건수 (건)
+
     const urlParams = new URLSearchParams(window.location.search);
+    
+    // baseline 비율 파싱
     const paramVal = urlParams.get('baseline') || urlParams.get('new_ratio') || urlParams.get('ratio');
     if (paramVal) {
         const parsed = parseInt(paramVal);
         if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
             baseline = parsed;
         }
+    }
+
+    // 신규 고객 월 예약 매출액 파싱
+    const paramRevenue = urlParams.get('new_revenue') || urlParams.get('revenue') || urlParams.get('monthly_revenue');
+    const parsedRevenue = parseValue(paramRevenue);
+    if (parsedRevenue !== null && parsedRevenue > 0) {
+        new_user_revenue = parsedRevenue;
+    }
+
+    // 월 전체 예약 건수 파싱
+    const paramBookings = urlParams.get('bookings') || urlParams.get('total_bookings');
+    const parsedBookings = parseValue(paramBookings);
+    if (parsedBookings !== null && parsedBookings > 0) {
+        total_bookings = parsedBookings;
     }
 
     // 도넛 차트 및 진단 해석 텍스트 초기화 반영
@@ -2176,34 +2170,31 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (discountVal) {
             case 5:
                 conversionIncrease = 5;
-                expectedRevenue = 400000;
                 break;
             case 10:
                 conversionIncrease = 15;
-                expectedRevenue = 1200000;
                 break;
             case 15:
                 conversionIncrease = 20;
-                expectedRevenue = 1600000;
                 break;
             case 20:
                 conversionIncrease = 23;
-                expectedRevenue = 1800000;
                 break;
             case 25:
                 conversionIncrease = 24;
-                expectedRevenue = 1900000;
                 break;
             case 30:
                 conversionIncrease = 25;
-                expectedRevenue = 2000000;
                 break;
             default:
                 conversionIncrease = 10;
-                expectedRevenue = 800000;
         }
 
         const target = baseline + conversionIncrease; // 예상 신규율
+
+        // 예상 추가 매출 계산: 신규 유저 매출액 * (전환율 상승치 / baseline)
+        const revenueScale = baseline > 0 ? (conversionIncrease / baseline) : (conversionIncrease / 10);
+        expectedRevenue = Math.round(new_user_revenue * revenueScale);
 
         // Y축 최대 값 계산 (최소 50%, 최대 100%, 10단위 반올림)
         const maxVal = Math.max(target, baseline);
@@ -2422,6 +2413,42 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     });
+
+    // 9. 월별 유입고객 비율 증감 데이터 테이블 동적 렌더링
+    function renderLogTable() {
+        const logTableBody = document.getElementById('log-table-body');
+        if (!logTableBody) return;
+
+        const baseTableData = [
+            { month: '2026-06 (당월)', total: 1250, ratio: 36.0, diff: '▲ 4.2%', diffClass: 'text-green' },
+            { month: '2026-05', total: 1180, ratio: 31.8, diff: '▲ 3.1%', diffClass: 'text-green' },
+            { month: '2026-04', total: 1020, ratio: 28.7, diff: '▲ 4.7%', diffClass: 'text-green' },
+            { month: '2026-03', total: 950, ratio: 24.0, diff: '▲ 1.8%', diffClass: 'text-green' },
+            { month: '2026-02', total: 890, ratio: 22.2, diff: '-', diffClass: 'text-muted' }
+        ];
+
+        const scale = total_bookings / 1250;
+        let html = '';
+
+        baseTableData.forEach(row => {
+            const scaledTotal = Math.round(row.total * scale);
+            const scaledNew = Math.round(scaledTotal * (row.ratio / 100));
+            
+            html += `
+                <tr>
+                    <td>${row.month}</td>
+                    <td>${scaledTotal.toLocaleString()}건</td>
+                    <td>${scaledNew.toLocaleString()}건</td>
+                    <td class="font-bold">${row.ratio.toFixed(1)}%</td>
+                    <td><span class="${row.diffClass}">${row.diff}</span></td>
+                </tr>
+            `;
+        });
+
+        logTableBody.innerHTML = html;
+    }
+
+    renderLogTable();
 
     // 페이지 최초 진입 시 데이터 빌드
     updateSimulation(10);
